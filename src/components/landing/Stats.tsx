@@ -5,7 +5,7 @@ import { AnimatedCounter } from "./AnimatedCounter";
 const stats = [
   { icon: GraduationCap, value: 100, suffix: "+", label: "طالب تم تدريبهم" },
   { icon: BookOpen, value: 15, suffix: "", label: "دورة مكتملة" },
-  { icon: Users, value: 12, suffix: "", label: "مدرّب متخصص" },
+  { icon: Users, value: 2, suffix: "", label: "مدرّب متخصص" },
   { icon: Award, value: 95, suffix: "%", label: "نسبة رضا المتدربين" },
 ];
 
