@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowRight, Building2, Phone, MessageCircle, Download, ClipboardList,
@@ -12,7 +12,6 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { orgLabel } from "@/lib/org-labels";
-
 
 type Course = {
   id: string; title: string;
@@ -35,7 +34,7 @@ export const Route = createFileRoute("/courses/$courseId")({ component: CourseDe
 
 function CourseDetailPage() {
   const { courseId } = Route.useParams();
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [course, setCourse] = useState<Course | null>(null);
   const [instructor, setInstructor] = useState<Instructor | null>(null);
@@ -44,39 +43,53 @@ function CourseDetailPage() {
   const [enrollStatus, setEnrollStatus] = useState<EnrollStatus>(null);
   const [busy, setBusy] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    if (!user) return;
-    const { data: c } = await supabase.from("courses")
-      .select("id, title, organization, instructor_id, work_file_url, work_file_urls, whatsapp_group_link, thumbnail_url")
-      .eq("id", courseId).maybeSingle();
-    if (!c) { navigate({ to: "/dashboard" }); return; }
-    setCourse(c as Course);
-
-    const [{ data: ins }, { data: sess }, { data: enr }] = await Promise.all([
-      c.instructor_id
-        ? supabase.from("instructors").select("id, name, title, profile_image_url, contact_number").eq("id", c.instructor_id).maybeSingle()
-        : Promise.resolve({ data: null }),
-      supabase.from("sessions").select("id, session_date, session_time").eq("course_id", courseId).order("session_date"),
-      supabase.from("enrollments").select("status").eq("course_id", courseId).eq("student_id", user.id).maybeSingle(),
-    ]);
-    setInstructor((ins as Instructor) ?? null);
-    setSessions((sess ?? []) as Session[]);
-    setEnrollStatus((enr?.status as EnrollStatus) ?? null);
-
-    if (enr?.status === "approved") {
-      const { data: a } = await supabase.from("assignments")
-        .select("id, title, description, due_date").eq("course_id", courseId).order("due_date");
-      setAssignments((a ?? []) as Assignment[]);
-    }
-    setPageLoading(false);
-  }, [courseId, user, navigate]);
+  const [fetchError, setFetchError] = useState(false);
 
   useEffect(() => {
-    if (loading) return;
+    if (authLoading) return;
     if (!user) { navigate({ to: "/login" }); return; }
-    load();
-  }, [user, loading, navigate, load]);
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { data: c } = await supabase.from("courses")
+          .select("id, title, organization, instructor_id, work_file_url, work_file_urls, whatsapp_group_link, thumbnail_url")
+          .eq("id", courseId).maybeSingle();
+
+        if (cancelled) return;
+
+        if (!c) { navigate({ to: "/dashboard" }); return; }
+        setCourse(c as Course);
+
+        const [{ data: ins }, { data: sess }, { data: enr }] = await Promise.all([
+          c.instructor_id
+            ? supabase.from("instructors").select("id, name, title, profile_image_url, contact_number").eq("id", c.instructor_id).maybeSingle()
+            : Promise.resolve({ data: null }),
+          supabase.from("sessions").select("id, session_date, session_time").eq("course_id", courseId).order("session_date"),
+          supabase.from("enrollments").select("status").eq("course_id", courseId).eq("student_id", user.id).maybeSingle(),
+        ]);
+
+        if (cancelled) return;
+
+        setInstructor((ins as Instructor) ?? null);
+        setSessions((sess ?? []) as Session[]);
+        setEnrollStatus((enr?.status as EnrollStatus) ?? null);
+
+        if (enr?.status === "approved") {
+          const { data: a } = await supabase.from("assignments")
+            .select("id, title, description, due_date").eq("course_id", courseId).order("due_date");
+          if (!cancelled) setAssignments((a ?? []) as Assignment[]);
+        }
+      } catch {
+        if (!cancelled) setFetchError(true);
+      } finally {
+        if (!cancelled) setPageLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [courseId, user, authLoading, navigate]);
 
   const handleEnroll = async () => {
     if (!user) return;
@@ -89,7 +102,7 @@ function CourseDetailPage() {
     setEnrollStatus("pending");
   };
 
-  if (loading || pageLoading || !course) {
+  if (authLoading || pageLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -97,7 +110,20 @@ function CourseDetailPage() {
     );
   }
 
-  
+  if (fetchError || !course) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <div className="max-w-md text-center">
+          <h2 className="text-xl font-bold text-foreground">حدث خطأ</h2>
+          <p className="mt-2 text-sm text-muted-foreground">تعذّر تحميل بيانات الدورة. حاول مرة أخرى.</p>
+          <Button className="mt-6" onClick={() => navigate({ to: "/dashboard" })}>
+            العودة إلى الدورات
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   const isApproved = enrollStatus === "approved";
   const workFiles = (course.work_file_urls && course.work_file_urls.length > 0)
     ? course.work_file_urls
@@ -127,7 +153,6 @@ function CourseDetailPage() {
 
         <div className="mt-8 grid gap-6 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
-            {/* Instructor Spotlight */}
             <Card className="p-6">
               <h2 className="mb-4 text-lg font-bold text-foreground">المدرب</h2>
               {instructor ? (
@@ -158,7 +183,6 @@ function CourseDetailPage() {
               ) : <p className="text-sm text-muted-foreground">لم يتم تعيين مدرب بعد</p>}
             </Card>
 
-            {/* Sessions Timeline */}
             <Card className="p-6">
               <div className="mb-5 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
@@ -182,12 +206,8 @@ function CourseDetailPage() {
                     const date = d.toLocaleDateString("ar-EG", { day: "numeric", month: "long", year: "numeric" });
                     const isPast = d < new Date(new Date().toDateString());
                     return (
-                      <li
-                        key={s.id}
-                        className={`group flex items-stretch gap-3 rounded-xl border bg-card p-3 transition hover:border-primary/40 hover:shadow-sm ${
-                          isPast ? "opacity-60" : ""
-                        }`}
-                      >
+                      <li key={s.id}
+                        className={`group flex items-stretch gap-3 rounded-xl border bg-card p-3 transition hover:border-primary/40 hover:shadow-sm ${isPast ? "opacity-60" : ""}`}>
                         <div className="flex w-14 shrink-0 flex-col items-center justify-center rounded-lg bg-primary/10 text-primary">
                           <span className="text-[10px] font-semibold">جلسة</span>
                           <span className="text-xl font-extrabold leading-none">{idx + 1}</span>
@@ -212,7 +232,6 @@ function CourseDetailPage() {
               )}
             </Card>
 
-            {/* Approved-only content */}
             {isApproved && (
               <>
                 <Card className="p-6">
@@ -276,7 +295,6 @@ function CourseDetailPage() {
             )}
           </div>
 
-          {/* Enroll CTA */}
           <div>
             <Card className="sticky top-24 p-6">
               <h3 className="text-lg font-bold text-foreground">حالة الانضمام</h3>
