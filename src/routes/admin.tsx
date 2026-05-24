@@ -42,6 +42,9 @@ type EnrollmentRow = {
     id: string; full_name: string | null; phone: string | null;
     un_number: string | null; individual_id: string | null; age: number | null;
   } | null;
+  courses: {
+    title: string;
+  } | null;
 };
 
 type Role = "Super_Admin" | "Instructor";
@@ -124,6 +127,7 @@ function AdminPage() {
             <TabsTrigger value="manage" disabled={!selectedCourseId}>
               إدارة الدورة
             </TabsTrigger>
+            <TabsTrigger value="enrollments">طلبات الانضمام</TabsTrigger>
             {isSuper && <TabsTrigger value="instructors">إدارة المدربين</TabsTrigger>}
           </TabsList>
 
@@ -145,6 +149,10 @@ function AdminPage() {
                 onBack={() => setSelectedCourseId(null)}
               />
             )}
+          </TabsContent>
+
+          <TabsContent value="enrollments" className="mt-4">
+            <AllEnrollments />
           </TabsContent>
 
           {isSuper && (
@@ -494,19 +502,88 @@ function AssignmentsManager({ courseId }: { courseId: string }) {
   );
 }
 
+function AllEnrollments() {
+  const [rows, setRows] = useState<EnrollmentRow[]>([]);
+  const refresh = useCallback(async () => {
+    const { data, error } = await supabase.from("enrollments")
+      .select("*, students ( id, full_name, phone, un_number, individual_id, age ), courses ( title )")
+      .order("created_at", { ascending: false });
+    if (error) { console.error("Enrollments Fetch Error:", error); return; }
+    setRows((data ?? []) as EnrollmentRow[]);
+  }, []);
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const setStatus = async (id: string, status: "approved" | "rejected") => {
+    const { error } = await supabase.from("enrollments").update({ status }).eq("id", id);
+    if (error) { console.error("Enrollment Update Error:", error); toast.error("تعذّر التحديث"); return; }
+    toast.success(status === "approved" ? "تم القبول" : "تم الرفض");
+    await refresh();
+  };
+
+  const statusBadge = (s: string) => {
+    if (s === "approved") return <Badge className="bg-green-600">مقبول</Badge>;
+    if (s === "pending") return <Badge variant="secondary">قيد المراجعة</Badge>;
+    return <Badge variant="destructive">مرفوض</Badge>;
+  };
+
+  return (
+    <Card className="p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="font-bold">جميع طلبات الانضمام ({rows.length})</h3>
+      </div>
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">لا توجد طلبات</p>
+      ) : (
+        <ul className="space-y-2">
+          {rows.map((r) => (
+            <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background/50 p-3 text-sm">
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold">
+                  {r.students?.full_name ?? "—"}
+                  <span className="mr-2 font-normal text-muted-foreground">
+                    ← {r.courses?.title ?? "—"}
+                  </span>
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {r.students?.phone ?? "—"} · UN: {r.students?.un_number ?? "—"} · ID: {r.students?.individual_id ?? "—"}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {statusBadge(r.status)}
+                {r.status !== "approved" && (
+                  <Button size="sm" onClick={() => setStatus(r.id, "approved")}>
+                    <Check className="ml-1 h-4 w-4" /> قبول
+                  </Button>
+                )}
+                {r.status !== "rejected" && (
+                  <Button size="sm" variant="outline" onClick={() => setStatus(r.id, "rejected")}>
+                    <X className="ml-1 h-4 w-4" /> رفض
+                  </Button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
 function EnrollmentsManager({ courseId, courseTitle }: { courseId: string; courseTitle: string }) {
   const [rows, setRows] = useState<EnrollmentRow[]>([]);
   const refresh = useCallback(async () => {
-    const { data } = await supabase.from("enrollments")
+    const { data, error } = await supabase.from("enrollments")
       .select("id, status, students ( id, full_name, phone, un_number, individual_id, age )")
-      .eq("course_id", courseId);
+      .eq("course_id", courseId)
+      .order("created_at", { ascending: false });
+    if (error) { console.error("Enrollments Fetch Error:", error); return; }
     setRows((data ?? []) as unknown as EnrollmentRow[]);
   }, [courseId]);
   useEffect(() => { refresh(); }, [refresh]);
 
   const setStatus = async (id: string, status: "approved" | "rejected") => {
     const { error } = await supabase.from("enrollments").update({ status }).eq("id", id);
-    if (error) { toast.error("تعذّر التحديث"); return; }
+    if (error) { console.error("Enrollment Update Error:", error); toast.error("تعذّر التحديث"); return; }
     toast.success(status === "approved" ? "تم القبول" : "تم الرفض");
     await refresh();
   };
