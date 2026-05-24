@@ -17,7 +17,6 @@ type Course = {
   id: string; title: string;
   organization: string;
   instructor_id: string | null;
-  work_file_url: string | null;
   work_file_urls: string[] | null;
   whatsapp_group_link: string | null;
   thumbnail_url: string | null;
@@ -53,12 +52,13 @@ function CourseDetailPage() {
 
     (async () => {
       try {
-        const { data: c } = await supabase.from("courses")
-          .select("id, title, organization, instructor_id, work_file_url, work_file_urls, whatsapp_group_link, thumbnail_url")
+        const { data: c, error: courseErr } = await supabase.from("courses")
+          .select("id, title, organization, instructor_id, work_file_urls, whatsapp_group_link, thumbnail_url")
           .eq("id", courseId).maybeSingle();
 
         if (cancelled) return;
 
+        if (courseErr) { console.error("Supabase Fetch Error:", courseErr); setFetchError(true); return; }
         if (!c) { setFetchError(true); return; }
         setCourse(c as Course);
 
@@ -125,9 +125,7 @@ function CourseDetailPage() {
   }
 
   const isApproved = enrollStatus === "approved";
-  const workFiles = (course.work_file_urls && course.work_file_urls.length > 0)
-    ? course.work_file_urls
-    : (course.work_file_url ? [course.work_file_url] : []);
+  const workFiles = course.work_file_urls ?? [];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted">
