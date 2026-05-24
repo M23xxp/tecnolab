@@ -96,10 +96,21 @@ function CourseDetailPage() {
     setBusy(true);
     const { error } = await supabase.from("enrollments")
       .insert({ student_id: user.id, course_id: courseId, status: "pending" });
-    setBusy(false);
-    if (error) { toast.error("تعذّر إرسال طلب الانضمام"); return; }
+    if (error) {
+      console.error("Enrollment Error:", error);
+      if (error.code === "23503") {
+        toast.error("يجب إكمال ملفك الشخصي أولاً");
+      } else if (error.code === "42501") {
+        toast.error("ليست لديك صلاحية التقديم على هذه الدورة");
+      } else {
+        toast.error("تعذّر إرسال طلب الانضمام");
+      }
+      setBusy(false);
+      return;
+    }
     toast.success("تم إرسال طلب الانضمام");
     setEnrollStatus("pending");
+    setBusy(false);
   };
 
   if (authLoading || pageLoading) {
