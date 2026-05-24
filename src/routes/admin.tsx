@@ -37,7 +37,7 @@ type Instructor = {
 type Session = { id: string; course_id: string; session_date: string; session_time: string };
 type Assignment = { id: string; course_id: string; title: string; description: string | null; due_date: string | null };
 type EnrollmentRow = {
-  id: string; status: "pending" | "approved" | "rejected";
+  student_id: string; course_id: string; status: "pending" | "approved" | "rejected";
   students: {
     id: string; full_name: string | null; phone: string | null;
     un_number: string | null; individual_id: string | null; age: number | null;
@@ -152,7 +152,7 @@ function AdminPage() {
           </TabsContent>
 
           <TabsContent value="enrollments" className="mt-4">
-            <AllEnrollments />
+            <AllEnrollments role={role} userId={userId} />
           </TabsContent>
 
           {isSuper && (
@@ -502,19 +502,22 @@ function AssignmentsManager({ courseId }: { courseId: string }) {
   );
 }
 
-function AllEnrollments() {
+function AllEnrollments({ role, userId }: { role: Role; userId: string }) {
   const [rows, setRows] = useState<EnrollmentRow[]>([]);
   const refresh = useCallback(async () => {
-    const { data, error } = await supabase.from("enrollments")
-      .select("*, students ( id, full_name, phone, un_number, individual_id, age ), courses ( title )")
+    let query = supabase.from("enrollments")
+      .select("*, students ( id, full_name, phone, un_number, individual_id, age ), courses!inner ( title )")
       .order("created_at", { ascending: false });
+    if (role !== "Super_Admin") query = query.eq("courses.instructor_id", userId);
+    const { data, error } = await query;
     if (error) { console.error("Enrollments Fetch Error:", error); return; }
     setRows((data ?? []) as EnrollmentRow[]);
-  }, []);
+  }, [role, userId]);
   useEffect(() => { refresh(); }, [refresh]);
 
-  const setStatus = async (id: string, status: "approved" | "rejected") => {
-    const { error } = await supabase.from("enrollments").update({ status }).eq("id", id);
+  const setStatus = async (studentId: string, courseId: string, status: "approved" | "rejected") => {
+    const { error } = await supabase.from("enrollments").update({ status })
+      .eq("student_id", studentId).eq("course_id", courseId);
     if (error) { console.error("Enrollment Update Error:", error); toast.error("تعذّر التحديث"); return; }
     toast.success(status === "approved" ? "تم القبول" : "تم الرفض");
     await refresh();
@@ -536,7 +539,7 @@ function AllEnrollments() {
       ) : (
         <ul className="space-y-2">
           {rows.map((r) => (
-            <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background/50 p-3 text-sm">
+            <li key={r.student_id + r.course_id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background/50 p-3 text-sm">
               <div className="min-w-0 flex-1">
                 <p className="font-semibold">
                   {r.students?.full_name ?? "—"}
@@ -551,12 +554,12 @@ function AllEnrollments() {
               <div className="flex items-center gap-2">
                 {statusBadge(r.status)}
                 {r.status !== "approved" && (
-                  <Button size="sm" onClick={() => setStatus(r.id, "approved")}>
+                  <Button size="sm" onClick={() => setStatus(r.student_id, r.course_id, "approved")}>
                     <Check className="ml-1 h-4 w-4" /> قبول
                   </Button>
                 )}
                 {r.status !== "rejected" && (
-                  <Button size="sm" variant="outline" onClick={() => setStatus(r.id, "rejected")}>
+                  <Button size="sm" variant="outline" onClick={() => setStatus(r.student_id, r.course_id, "rejected")}>
                     <X className="ml-1 h-4 w-4" /> رفض
                   </Button>
                 )}
@@ -573,7 +576,7 @@ function EnrollmentsManager({ courseId, courseTitle }: { courseId: string; cours
   const [rows, setRows] = useState<EnrollmentRow[]>([]);
   const refresh = useCallback(async () => {
     const { data, error } = await supabase.from("enrollments")
-      .select("id, status, students ( id, full_name, phone, un_number, individual_id, age )")
+      .select("student_id, course_id, status, students ( id, full_name, phone, un_number, individual_id, age )")
       .eq("course_id", courseId)
       .order("created_at", { ascending: false });
     if (error) { console.error("Enrollments Fetch Error:", error); return; }
@@ -581,8 +584,9 @@ function EnrollmentsManager({ courseId, courseTitle }: { courseId: string; cours
   }, [courseId]);
   useEffect(() => { refresh(); }, [refresh]);
 
-  const setStatus = async (id: string, status: "approved" | "rejected") => {
-    const { error } = await supabase.from("enrollments").update({ status }).eq("id", id);
+  const setStatus = async (studentId: string, status: "approved" | "rejected") => {
+    const { error } = await supabase.from("enrollments").update({ status })
+      .eq("student_id", studentId).eq("course_id", courseId);
     if (error) { console.error("Enrollment Update Error:", error); toast.error("تعذّر التحديث"); return; }
     toast.success(status === "approved" ? "تم القبول" : "تم الرفض");
     await refresh();
@@ -628,7 +632,7 @@ function EnrollmentsManager({ courseId, courseTitle }: { courseId: string; cours
       ) : (
         <ul className="space-y-2">
           {rows.map((r) => (
-            <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background/50 p-3 text-sm">
+            <li key={r.student_id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background/50 p-3 text-sm">
               <div className="min-w-0 flex-1">
                 <p className="font-semibold">{r.students?.full_name ?? "—"}</p>
                 <p className="text-xs text-muted-foreground">
@@ -638,12 +642,12 @@ function EnrollmentsManager({ courseId, courseTitle }: { courseId: string; cours
               <div className="flex items-center gap-2">
                 {statusBadge(r.status)}
                 {r.status !== "approved" && (
-                  <Button size="sm" onClick={() => setStatus(r.id, "approved")}>
+                  <Button size="sm" onClick={() => setStatus(r.student_id, "approved")}>
                     <Check className="ml-1 h-4 w-4" /> قبول
                   </Button>
                 )}
                 {r.status !== "rejected" && (
-                  <Button size="sm" variant="outline" onClick={() => setStatus(r.id, "rejected")}>
+                  <Button size="sm" variant="outline" onClick={() => setStatus(r.student_id, "rejected")}>
                     <X className="ml-1 h-4 w-4" /> رفض
                   </Button>
                 )}
