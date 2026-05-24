@@ -59,7 +59,7 @@ function CourseDetailPage() {
 
         if (cancelled) return;
 
-        if (!c) { navigate({ to: "/dashboard" }); return; }
+        if (!c) { setFetchError(true); return; }
         setCourse(c as Course);
 
         const [{ data: ins }, { data: sess }, { data: enr }] = await Promise.all([
