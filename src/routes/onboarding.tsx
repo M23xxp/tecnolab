@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/onboarding")({
@@ -21,6 +22,7 @@ function OnboardingPage() {
     un_number: "",
     individual_id: "",
     age: "",
+    gender: "",
   });
 
   useEffect(() => {
@@ -31,7 +33,7 @@ function OnboardingPage() {
     if (!user) return;
     supabase
       .from("students")
-      .select("full_name, phone, un_number, individual_id, age, is_completed")
+      .select("full_name, phone, un_number, individual_id, age, gender, is_completed")
       .eq("id", user.id)
       .maybeSingle()
       .then(({ data }) => {
@@ -46,6 +48,7 @@ function OnboardingPage() {
             un_number: data.un_number ?? "",
             individual_id: data.individual_id ?? "",
             age: data.age != null ? String(data.age) : "",
+            gender: data.gender ?? "",
           });
         }
       });
@@ -54,7 +57,7 @@ function OnboardingPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
-    if (!form.full_name || !form.phone || !form.un_number || !form.individual_id || !form.age) {
+    if (!form.full_name || !form.phone || !form.un_number || !form.individual_id || !form.age || !form.gender) {
       toast.error("الرجاء تعبئة جميع الحقول");
       return;
     }
@@ -73,6 +76,7 @@ function OnboardingPage() {
         un_number: form.un_number,
         individual_id: form.individual_id,
         age: ageNum,
+        gender: form.gender,
         is_completed: true,
       });
     setSubmitting(false);
@@ -121,6 +125,16 @@ function OnboardingPage() {
             <Label htmlFor="individual_id">الرقم الفردي (Individual ID)</Label>
             <Input id="individual_id" value={form.individual_id}
               onChange={(e) => setForm({ ...form, individual_id: e.target.value })} required />
+          </div>
+          <div className="space-y-2">
+            <Label>الجنس</Label>
+            <Select value={form.gender} onValueChange={(v) => setForm({ ...form, gender: v })}>
+              <SelectTrigger><SelectValue placeholder="اختر الجنس" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="male">ذكر</SelectItem>
+                <SelectItem value="female">أنثى</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <Button type="submit" disabled={submitting} className="w-full h-11 font-semibold">
             {submitting ? "جارٍ الحفظ..." : "حفظ ومتابعة"}

@@ -27,6 +27,7 @@ type Course = {
   work_file_urls: string[] | null;
   whatsapp_group_link: string | null;
   is_active: boolean;
+  target_gender: string | null;
 };
 type Instructor = {
   id: string; name: string; title: string | null;
@@ -57,7 +58,7 @@ function AdminPage() {
 
   const refreshCourses = useCallback(async (currentRole: Role, uid: string) => {
     let q = supabase.from("courses")
-      .select("id, title, organization, instructor_id, thumbnail_url, work_file_urls, whatsapp_group_link, is_active")
+      .select("id, title, organization, instructor_id, thumbnail_url, work_file_urls, whatsapp_group_link, is_active, target_gender")
       .order("created_at", { ascending: false });
     if (currentRole === "Instructor") {
       q = q.eq("instructor_id", uid);
@@ -213,6 +214,9 @@ function CoursesTab({
                   <p className="text-xs text-muted-foreground">{orgLabel(c.organization)}</p>
                 </div>
                 {!c.is_active && <Badge variant="secondary">غير نشطة</Badge>}
+                <Badge variant="outline" className="border-primary/30 text-xs">
+                  {c.target_gender === "male" ? "شباب" : c.target_gender === "female" ? "بنات" : "مختلط"}
+                </Badge>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Button variant="outline" size="sm" onClick={() => onManage(c.id)}>
@@ -248,6 +252,7 @@ function CourseFormDialog({
     whatsapp_group_link: initial?.whatsapp_group_link ?? "",
     work_file_urls: (initial?.work_file_urls ?? []).join("\n"),
     is_active: initial?.is_active ?? true,
+    target_gender: initial?.target_gender ?? "both",
   });
   const [saving, setSaving] = useState(false);
 
@@ -263,6 +268,7 @@ function CourseFormDialog({
       whatsapp_group_link: form.whatsapp_group_link || null,
       work_file_urls: form.work_file_urls.split("\n").map((s) => s.trim()).filter(Boolean),
       is_active: form.is_active,
+      target_gender: form.target_gender,
     };
     const { error } = initial
       ? await supabase.from("courses").update(payload).eq("id", initial.id)
@@ -309,6 +315,17 @@ function CourseFormDialog({
               </Select>
             </div>
           )}
+        </div>
+        <div className="space-y-1.5">
+          <Label>الفئة المستهدفة</Label>
+          <Select value={form.target_gender} onValueChange={(v) => setForm({ ...form, target_gender: v })}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="both">الجميع</SelectItem>
+              <SelectItem value="male">شباب</SelectItem>
+              <SelectItem value="female">بنات</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div className="space-y-1.5">
           <Label>رابط الصورة المصغرة</Label>

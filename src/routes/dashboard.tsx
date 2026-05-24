@@ -14,6 +14,7 @@ type Course = {
   organization: string;
   thumbnail_url: string | null;
   instructors: { name: string | null } | null;
+  target_gender: string | null;
 };
 
 export const Route = createFileRoute("/dashboard")({ component: DashboardPage });
@@ -23,20 +24,28 @@ function DashboardPage() {
   const navigate = useNavigate();
   const [checking, setChecking] = useState(true);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [studentGender, setStudentGender] = useState<string | null>(null);
 
   useEffect(() => {
     if (loading) return;
     if (!user) { navigate({ to: "/login" }); return; }
     (async () => {
       const { data: profile } = await supabase
-        .from("students").select("is_completed").eq("id", user.id).maybeSingle();
+        .from("students").select("is_completed, gender").eq("id", user.id).maybeSingle();
       if (!profile || !profile.is_completed) { navigate({ to: "/onboarding" }); return; }
+      setStudentGender(profile.gender);
       const { data } = await supabase
         .from("courses")
-        .select("id, title, organization, thumbnail_url, instructors ( name )")
+        .select("id, title, organization, thumbnail_url, target_gender, instructors ( name )")
         .eq("is_active", true)
         .order("created_at", { ascending: false });
-      setCourses((data ?? []) as unknown as Course[]);
+      let allCourses = (data ?? []) as unknown as Course[];
+      if (profile.gender) {
+        allCourses = allCourses.filter(
+          (c) => !c.target_gender || c.target_gender === "both" || c.target_gender === profile.gender,
+        );
+      }
+      setCourses(allCourses);
       setChecking(false);
     })();
   }, [user, loading, navigate]);
@@ -94,7 +103,12 @@ function DashboardPage() {
                         <Building2 className="h-4 w-4" />
                         {orgLabel(c.organization)}
                       </div>
-                      <div className="mt-5 flex items-center gap-1 text-sm font-medium text-primary">
+                      <div className="mt-3 flex items-center gap-2">
+                        <span className="rounded-full border border-primary/30 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
+                          {c.target_gender === "male" ? "شفت شباب" : c.target_gender === "female" ? "شفت بنات" : "مختلط"}
+                        </span>
+                      </div>
+                      <div className="mt-4 flex items-center gap-1 text-sm font-medium text-primary">
                         عرض التفاصيل
                         <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
                       </div>
